@@ -1,11 +1,11 @@
 # Akamai Provider 
 
 edgerc_location = "~/.edgerc"
-edgerc_section  = "tf-tcw"
+edgerc_section  = "tf"
 
 # Common
 
-group_name = "jaescalo"
+group_name = "Group Name"
 
 # Edge Hostname
 
