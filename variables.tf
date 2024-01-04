@@ -1,4 +1,20 @@
 # -------------------------------------------------
+# Akamai Provider Variables
+# -------------------------------------------------
+
+variable "edgerc_location" {
+  description = "Location for the .edgerc file with credentials"
+  type        = string
+  default     = "~/.edgerc"
+}
+
+variable "edgerc_section" {
+  description = "Section in the .edgerc file to use"
+  type        = string
+  default     = "default"
+}
+
+# -------------------------------------------------
 # Common Variables 
 # -------------------------------------------------
 
@@ -49,10 +65,20 @@ variable "cp_code_name" {
 
 variable "origin_parameters" {
   type = object({
-    name    = string
-    cp_code = number
-    type    = string
+    hostname           = string
+    netstorage_cp_code = number
+    type               = string
   })
+  default = {
+    hostname           = "www.example.com"
+    netstorage_cp_code = null
+    type               = "CUSTOMER"
+  }
+  validation {
+    # regex(...) fails if it cannot find a match
+    condition     = can(regex("^CUSTOMER$|^NET_STORAGE$", var.origin_parameters.type))
+    error_message = "Invalid origin type. Valid origin types are CUSTOMER or NET_STORAGE"
+  }
 }
 
 variable "version_notes" {
@@ -60,7 +86,7 @@ variable "version_notes" {
   description = "Version Notes for the Property"
 }
 
-variable "email" {
-  type        = string
-  description = "Notification email"
+variable "emails" {
+  type        = list(string)
+  description = "Notification emails"
 }

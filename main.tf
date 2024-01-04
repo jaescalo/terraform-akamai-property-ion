@@ -17,6 +17,13 @@ resource "akamai_edge_hostname" "my-resource_edge_hostname" {
   edge_hostname = var.edge_hostname
 }
 
+locals {
+  # Because there are 2 data sources (one for CUSTOMER and one for NET_STORAGE origins) we evaluate 
+  # the origin_parameters.type variable to determine where to pull the rule format and rules from.
+  rule_format = var.origin_parameters.type == "CUSTOMER" ? data.akamai_property_rules_builder.my-origin-resource_rule_default[0].rule_format : data.akamai_property_rules_builder.my-ns-origin-resource_rule_default[0].rule_format
+
+  rules = var.origin_parameters.type == "CUSTOMER" ? data.akamai_property_rules_builder.my-origin-resource_rule_default[0].json : data.akamai_property_rules_builder.my-ns-origin-resource_rule_default[0].json
+}
 
 resource "akamai_property" "my-resource" {
   name        = var.property_name
@@ -32,14 +39,13 @@ resource "akamai_property" "my-resource" {
       cert_provisioning_type = "DEFAULT"
     }
   }
-
-  rule_format = data.akamai_property_rules_builder.my-resource_rule_default.rule_format
-  rules       = replace(data.akamai_property_rules_builder.my-resource_rule_default.json, "\"rules\"", "\"comments\": \"${var.version_notes}\", \"rules\"")
+  rule_format = local.rule_format
+  rules       = replace(local.rules, "\"rules\"", "\"comments\": \"${var.version_notes}\", \"rules\"")
 }
 
 resource "akamai_property_activation" "my-resource-staging" {
   property_id                    = akamai_property.my-resource.id
-  contact                        = [var.email]
+  contact                        = var.emails
   version                        = akamai_property.my-resource.latest_version
   network                        = "STAGING"
   auto_acknowledge_rule_warnings = true
@@ -47,7 +53,7 @@ resource "akamai_property_activation" "my-resource-staging" {
 
 resource "akamai_property_activation" "my-resource-production" {
   property_id                    = akamai_property.my-resource.id
-  contact                        = [var.email]
+  contact                        = var.emails
   version                        = akamai_property.my-resource.latest_version
   network                        = "PRODUCTION"
   auto_acknowledge_rule_warnings = true
@@ -58,7 +64,49 @@ resource "akamai_property_activation" "my-resource-production" {
 # Rule Tree
 # -------------------------------------------------
 
-data "akamai_property_rules_builder" "my-resource_rule_default" {
+
+data "akamai_property_rules_builder" "my-origin-resource_rule_default" {
+  count = var.origin_parameters.type == "CUSTOMER" ? 1 : 0
+
+  rules_v2023_10_30 {
+    name      = "default"
+    is_secure = false
+    comments  = "The Default Rule template contains all the necessary and recommended behaviors. Rules are evaluated from top to bottom and the last matching rule wins."
+    behavior {
+      origin {
+        cache_key_hostname            = "REQUEST_HOST_HEADER"
+        compress                      = true
+        enable_true_client_ip         = true
+        forward_host_header           = "REQUEST_HOST_HEADER"
+        hostname                      = var.origin_parameters.hostname
+        http_port                     = 80
+        https_port                    = 443
+        ip_version                    = "IPV4"
+        min_tls_version               = "DYNAMIC"
+        origin_certificate            = ""
+        origin_sni                    = true
+        origin_type                   = "CUSTOMER"
+        ports                         = ""
+        tls13_support                 = false
+        tls_version_title             = ""
+        true_client_ip_client_setting = false
+        true_client_ip_header         = "True-Client-IP"
+        verification_mode             = "PLATFORM_SETTINGS"
+      }
+    }
+    children = [
+      data.akamai_property_rules_builder.my-resource_rule_augment_insights.json,
+      data.akamai_property_rules_builder.my-resource_rule_accelerate_delivery.json,
+      data.akamai_property_rules_builder.my-resource_rule_offload_origin.json,
+      data.akamai_property_rules_builder.my-resource_rule_strengthen_security.json,
+      data.akamai_property_rules_builder.my-resource_rule_increase_availability.json,
+      data.akamai_property_rules_builder.my-resource_rule_minimize_payload.json,
+    ]
+  }
+}
+
+data "akamai_property_rules_builder" "my-ns-origin-resource_rule_default" {
+  count = var.origin_parameters.type == "NET_STORAGE" ? 1 : 0
   rules_v2023_10_30 {
     name      = "default"
     is_secure = false
@@ -66,10 +114,10 @@ data "akamai_property_rules_builder" "my-resource_rule_default" {
     behavior {
       origin {
         net_storage {
-          cp_code              = var.origin_parameters.cp_code
-          download_domain_name = var.origin_parameters.name
+          cp_code              = var.origin_parameters.netstorage_cp_code
+          download_domain_name = var.origin_parameters.hostname
         }
-        origin_type = var.origin_parameters.type
+        origin_type = "NET_STORAGE"
       }
     }
     children = [

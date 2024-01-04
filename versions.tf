@@ -7,3 +7,8 @@ terraform {
   }
   required_version = ">= 0.13"
 }
+
+provider "akamai" {
+  edgerc         = var.edgerc_location
+  config_section = var.edgerc_section
+}
